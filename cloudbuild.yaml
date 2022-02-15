@@ -1,0 +1,78 @@
+steps:
+- id: 'get-objects-from-cloudstorage'
+  name: 'gcr.io/cloud-builders/gsutil'
+  entrypoint: 'bash'
+  args:
+   - '-c'
+   - |
+        gsutil cp 'gs://bigsmart-tranfer-cloudbuild/$BRANCH_NAME/instances-names' '/workspace/instances-names' && \
+        gsutil cp 'gs://bigsmart-tranfer-cloudbuild/$BRANCH_NAME/cloudflare_front.txt' '/workspace/' && \
+        gsutil cp 'gs://bigsmart-tranfer-cloudbuild/$BRANCH_NAME/cloudflare_api.txt' '/workspace/'
+
+# [GET-CLOUDFLARE-TOKEN]
+# - id: 'get-token-cloudflare'
+#   waitFor: ['-']
+#   name: 'gcr.io/cloud-builders/gcloud'
+#   entrypoint: 'bash'
+#   args: [ '-c', "gcloud secrets versions access latest --secret=token-Cloudflare --format='get(payload.data)' | tr '_-' '/+' | base64 -d > token_cf.txt" ]
+
+- id: 'delete-cloudflare-front'
+  name: 'gcr.io/cloud-builders/curl'
+  waitFor: ['get-objects-from-cloudstorage']
+  entrypoint: 'bash'
+  args: 
+    - '-c'
+    - |
+        curl -X DELETE "https://api.cloudflare.com/client/v4/zones/$$CF_ZONE/dns_records/$(cat /workspace/cloudflare_front.txt | cut -d, -f1 | cut -d: -f3 | cut -d\" -f2)" \
+        -H "X-Auth-Email: administrador@bigsmart.mx" \
+        -H "Authorization: Bearer $$CF_TOKEN" \
+        -H "Content-Type: application/json"
+  secretEnv: ['CF_TOKEN', 'CF_ZONE']
+
+- id: 'delete-cloudflare-api'
+  name: 'gcr.io/cloud-builders/curl'
+  waitFor: ['get-objects-from-cloudstorage']
+  entrypoint: 'bash'
+  args: 
+    - '-c'
+    - |
+        curl -X DELETE "https://api.cloudflare.com/client/v4/zones/$$CF_ZONE/dns_records/$(cat /workspace/cloudflare_api.txt | cut -d, -f1 | cut -d: -f3 | cut -d\" -f2)" \
+        -H "X-Auth-Email: administrador@bigsmart.mx" \
+        -H "Authorization: Bearer $$CF_TOKEN" \
+        -H "Content-Type: application/json"
+  secretEnv: ['CF_TOKEN', 'CF_ZONE']
+
+- id: 'elimina-db'
+  name: 'gcr.io/cloud-builders/gcloud'
+  waitFor: ['get-objects-from-cloudstorage']
+  entrypoint: 'bash'
+  args:
+    - '-c'
+    - |
+          gcloud sql instances delete $(cat /workspace/instances-names | grep sql)
+  
+- id: 'elimina-api'
+  name: 'gcr.io/cloud-builders/gcloud'
+  waitFor: ['get-objects-from-cloudstorage']
+  entrypoint: 'bash'
+  args:
+    - '-c'
+    - |
+        gcloud compute instances delete $(cat /workspace/instances-names | grep api) --zone us-central1-a
+
+- id: 'elimina-front'
+  name: 'gcr.io/cloud-builders/gcloud'
+  waitFor: ['get-objects-from-cloudstorage']
+  entrypoint: 'bash'
+  args:
+    - '-c'
+    - |
+        gcloud compute instances delete $(cat /workspace/instances-names | grep front) --zone us-central1-a
+availableSecrets:
+            secretManager:
+            - versionName: projects/bigsmart/secrets/token-Cloudflare/versions/latest
+              env: 'CF_TOKEN'
+            - versionName: projects/bigsmart/secrets/cloudflare_zone/versions/latest
+              env: 'CF_ZONE'
+
+
