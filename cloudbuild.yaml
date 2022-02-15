@@ -10,7 +10,7 @@ steps:
         gsutil cp 'gs://bigsmart-tranfer-cloudbuild/$BRANCH_NAME/cloudflare_api.txt' '/workspace/'
 
 # [GET-CLOUDFLARE-TOKEN]
-# - id: 'get-token-cloudflare'
+#  - id: 'get-token-cloudflare'
 #   waitFor: ['-']
 #   name: 'gcr.io/cloud-builders/gcloud'
 #   entrypoint: 'bash'
